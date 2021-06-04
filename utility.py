@@ -19,8 +19,8 @@ COL_NAME_ITEM_ID = COL_NAME_MOVIE_ID
 COL_NAME_RATING = "rating"
 COL_NAME_MOVIE_RATINGS = "movies_and_ratings"
 
-from google.colab import drive
-drive.mount("/content/drive",force_remount=True)
+# from google.colab import drive
+# drive.mount("/content/drive",force_remount=True)
 
 BASE_PATH = '/content/drive/MyDrive/CSE547_Final_Project/ml-100k/'
 class Utility:
@@ -66,6 +66,9 @@ class Utility:
     def manhattan_distance(self, point1, point2):
         return abs(point1 - point2).sum()
     
+    def jaccard_distance(self, point1, point2):
+        return distance.jaccard(point1, point2)
+    
     def find_closest_point(self, points_list, point, metric='euclidean'):
 
         min_distance = float('inf')
@@ -75,7 +78,9 @@ class Utility:
             if metric == 'euclidean':
                 distance = self.euclidean_distance(p, point)
             elif metric == 'manhattan':
-                self.manhattan_distance(p, point)
+                distance = self.manhattan_distance(p, point)
+            elif metric == 'jaccard':
+                distance = self.jaccard_distance(p, point)
             else:
                 print('Function not implemented!')
 
@@ -286,7 +291,7 @@ class Utility:
               user_to_cluster_dict[user_id] = idx_to_kidx_path_dict[id_to_idx_dict[user_id]]
             else:
               #print(f'{user_id} not found in training data!')
-              user_to_cluster_dict[user_id] = self.find_closest_point(k_anaon_data, row_vec)
+              user_to_cluster_dict[user_id] = self.find_closest_point(k_anaon_data, row_vec, metric)
               #print(f'{user_id} mapped to {user_to_cluster_dict[user_id]}')
         
         return user_to_cluster_dict
