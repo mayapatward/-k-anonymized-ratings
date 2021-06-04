@@ -16,7 +16,7 @@ import pandas as pd
 # drive.mount("/content/drive",force_remount=True)
 
 class Utility:
-
+    
     def __init__(self, _base_path:str='/content/drive/MyDrive/CSE547_Final_Project/ml-100k', ratings_file_path='/content/drive/MyDrive/CSE547_Final_Project/ml-100k/ratings.csv'):
         """Init the utility class
 
@@ -70,6 +70,53 @@ class Utility:
         
         return min_distance_idx
     
+    def flatten_matrix_into_dataframe(self, matrix):
+      value_vars = [v for v in matrix.columns.values if v != COL_NAME_USER_ID]
+      DEFAULT_VARIABLE_NAME_IN_MELT="variable"
+      DEFAULT_VALUE_NAME_IN_MELT="value"
+      movies_dict = self.get_movie_index()
+      matrix = matrix \
+        .melt(id_vars=[COL_NAME_USER_ID], value_vars=value_vars) \
+        .rename(columns={DEFAULT_VARIABLE_NAME_IN_MELT: COL_NAME_MOVIE_ID, DEFAULT_VALUE_NAME_IN_MELT: COL_NAME_RATING}) \
+        .apply(lambda x : pd.to_numeric(x, downcast='integer'))
+      matrix[COL_NAME_MOVIE_ID] = matrix[COL_NAME_MOVIE_ID].apply(lambda x: movies_dict[x])
+      matrix[COL_NAME_USER_ID] = matrix[COL_NAME_USER_ID] + 1
+      matrix = matrix[matrix[COL_NAME_RATING] > 0]
+      return matrix
+
+    def get_training_data_file_path(self, k:int):
+      return os.path.join(self.base_path, f"{k}{self.k_anonymized_postfix}")
+
+    def get_test_data_file_path(self):
+      return os.path.join(self.base_path, self.test_file)
+
+    def get_training_data(self, k:int):
+      mldf = pd.read_csv(self.get_training_data_file_path(k), header=None).reset_index().rename(columns={'index': COL_NAME_USER_ID})
+      mldf= self.flatten_matrix_into_dataframe(mldf)
+      return mldf, len(mldf[COL_NAME_USER_ID].unique()), len(mldf[COL_NAME_MOVIE_ID].unique())
+
+    def get_training_data_for_evaluation(self):
+      mldf = pd.read_csv(self.get_training_data_path())
+      return self._group_and_get_sets_for_evaluation(mldf)
+
+    def get_test_data(self):
+      return pd.read_csv(self.get_test_data_file_path()).apply(lambda x : pd.to_numeric(x, downcast='integer'))
+
+    def _group_and_get_sets_for_evaluation(self, df):
+      testdf=df.sort_values(by=COL_NAME_RATING, ascending=False)
+      grouped=testdf.groupby(COL_NAME_USER_ID).agg({COL_NAME_MOVIE_ID:lambda x: list(x), COL_NAME_RATING:lambda x: list(x)})
+      grouped[COL_NAME_MOVIE_RATINGS] = grouped.apply(lambda x: list(zip(x[COL_NAME_MOVIE_ID], x[COL_NAME_RATING])), axis=1)
+      grouped=grouped.drop(columns=[COL_NAME_RATING])
+      return grouped
+
+    def get_unanonymized_training_data(self):
+      df = pd.read_csv(self.get_training_data_path())
+      return df.apply(pd.to_numeric), len(df[COL_NAME_USER_ID].unique()), len(df[COL_NAME_MOVIE_ID].unique())
+
+    def get_test_data_for_evaluation(self):
+      testdf=Utility().get_test_data()
+      return self._group_and_get_sets_for_evaluation(testdf)
+  
     def get_training_data_path(self, base_path=""):
         """Get path to training file
 
@@ -181,6 +228,42 @@ class Utility:
 
         return file_path
     
+    def _coalesce_path(self,path1, path2):
+      return path1 if path1 != "" else path2
+
+    def get_utility_matrix_from_train_hrishi(self, base_path=""):
+        '''
+        OLD FUNCTION -- DO NOT USE
+        '''
+        base_path = self._coalesce_path(base_path, self.base_path)
+        complete_file_path = os.path.join(base_path, self.training_file)
+        if not os.path.exists(complete_file_path):
+            raise OSError(f'{complete_file_path} is not a file')
+        
+        df = pd.read_csv(complete_file_path)
+        
+        movie_to_idx_path = self.get_train_data_movie_map_path(base_path)
+        with open(movie_to_idx_path) as json_file:
+            movie_id_to_idx_dict = json.load(json_file)
+
+        users = df.userId.unique()
+        test_user_dict = {users[i]: i for i in range(len(users))}
+
+        num_users = len(df.userId.unique())
+        num_movies = len(movie_id_to_idx_dict) + 1
+        utility_matrix = np.zeros((num_users, num_movies))
+
+        for index, row in df.iterrows():
+            movie_id, rating = str(int(row[self.movie_id_col])), float(row[self.rating_col])
+            utility_matrix[test_user_dict[row[self.user_id_col]]][0] = int(row[self.user_id_col])
+            
+            if movie_id in movie_id_to_idx_dict.keys():
+                utility_matrix[test_user_dict[row[self.user_id_col]]][movie_id_to_idx_dict[movie_id]] = rating
+            else:
+                print(f'Movie ID {movie_id} not found!')
+        
+        return utility_matrix
+
     def get_utility_matrix_from_train(self, file_path, base_path=""):
         if not os.path.exists(file_path):
             raise OSError(f'{file_path} is not a file')
@@ -234,6 +317,18 @@ class Utility:
 
         return file_path
     
+    def get_movie_index(self):
+      movie_to_idx_path = self.get_train_data_movie_map_path(self.base_path)
+      with open(movie_to_idx_path) as json_file:
+          movie_id_to_idx_dict = json.load(json_file)
+      return {v:int(k) for k,v in movie_id_to_idx_dict.items()}
+
+    def get_movie_to_col_index(self):
+      movie_to_idx_path = self.get_train_data_movie_map_path(self.base_path)
+      with open(movie_to_idx_path) as json_file:
+          movie_id_to_idx_dict = json.load(json_file)
+      return {int(k):v for k,v in movie_id_to_idx_dict.items()}
+
     def get_feature_vector_for_user(self, movie_ratings:list, base_path=""):
         """Returns a vector, with the same dimentions as the 
         training dataset. 
@@ -256,6 +351,44 @@ class Utility:
                 print(f'Movie ID {movie_id} not found!')
         
         return feature_vec
+    
+    def get_closest_k_cluster_to_user_id_hrishi(self, k:int, metric="euclidean", base_path=""):
+        '''
+        OLD FUNCTION -- DO NOT USE
+        '''
+        id_to_idx_path = self.get_train_data_user_map_path(base_path)
+        idx_to_kidx_path = self.get_k_anonymized_map_path(k, base_path)
+        k_anon_data_path = self.get_k_anonymized_data_path(k, base_path)
+
+        with open(id_to_idx_path) as json_file:
+            id_to_idx_dict = json.load(json_file)
+        
+        with open(idx_to_kidx_path) as json_file:
+            idx_to_kidx_path_dict = json.load(json_file)
+
+        k_anaon_data = pd.read_csv(k_anon_data_path, sep=',', header=None).values
+        
+        u_matrix = self.get_utility_matrix_from_train(base_path)
+        user_to_cluster_dict = {}
+        for um in u_matrix:
+            user_id = str(int(um[0]))
+            row_vec = um[1:]
+        
+            # Easy case - We have trained on this user before
+            # Just need to lookup, to see what cluster they belong to
+            try:
+              if user_id in id_to_idx_dict.keys() and\
+              str(id_to_idx_dict[user_id]) in idx_to_kidx_path_dict.keys():            
+                  user_to_cluster_dict[int(user_id)] = idx_to_kidx_path_dict[str(id_to_idx_dict[user_id])]
+              else:
+                  # print(f'{user_id} not found in training data!')
+                  user_to_cluster_dict[int(user_id)] = self.find_closest_point(k_anaon_data, row_vec)
+                  print(f'{user_id} mapped to {user_to_cluster_dict[int(user_id)]}')
+            except:
+              print(type(k_anon_data), " ", type(row_vec))
+              raise
+        
+        return user_to_cluster_dict
     
     def get_closest_k_cluster_to_user_id(self, file_path:str, k:int, metric="euclidean", base_path=""):
         id_to_idx_path = self.get_train_data_user_map_path(base_path)
@@ -288,21 +421,20 @@ class Utility:
         
         return user_to_cluster_dict
     
-    
-    def avg_mahalanobis_dist(user_movie_matrix, anon_matrix, useridx_to_cluster):
-      ##user_movie_matrix and anon_matrix are numpy arrays
-      #useridx_to_cluster is a dictionary mapping the index to a cluster
-      d = dict()
-      stdev = np.std(anon_matrix, axis = 0)
-      for u, user in enumerate(user_movie_matrix):
+def avg_mahalanobis_dist(user_movie_matrix, anon_matrix, useridx_to_cluster):
+    ##user_movie_matrix and anon_matrix are numpy arrays
+    #useridx_to_cluster is a dictionary mapping the index to a cluster
+    d = dict()
+    stdev = np.std(anon_matrix, axis = 0)
+    for u, user in enumerate(user_movie_matrix):
         ##some users are not mapped to clusters
         if u in useridx_to_cluster.keys():
-          cluster_idx = idx_to_cluster[u]
-          cluster = anon_matrix[cluster_idx]
-          d[u] = mahalanobis_dist(user, cluster, stdev)
-      return np.mean(list(d.values()))
+            cluster_idx = idx_to_cluster[u]
+            cluster = anon_matrix[cluster_idx]
+            d[u] = mahalanobis_dist(user, cluster, stdev)
+    return np.mean(list(d.values()))
 
-# u = Utility(_base_path = '/content/drive/MyDrive/CSE547_Final_Project/ml-100k/ratings_split/iter_1')
+# u = Utility(_base_path = '/content/drive/MyDrive/CSE547_Final_Project/ml-100k/ratings_split/iter_1_fix')
 # print(u.get_training_data_path())
 # print(u.get_train_data_user_map_path())
 # print(u.get_train_data_movie_map_path())
@@ -313,13 +445,14 @@ class Utility:
 
 # import pandas as pd
 # df = pd.read_csv(u.get_test_data_path())
-# df = pd.read_csv(u.get_validation_data_path())
+# # df = pd.read_csv(u.get_validation_data_path())
 
 # df.head()
 
-# t_path = str(u.get_test_data_path())
-# umatrix = u.get_utility_matrix_from_train(t_path, base_path="")
+# # t_path = str(u.get_test_data_path())
+# ratings_f_path = '/content/drive/MyDrive/CSE547_Final_Project/ml-100k/ratings.csv'
+# umatrix = u.get_utility_matrix_from_train(ratings_f_path, base_path="")
 
 # feature_vector = u.get_feature_vector_for_user([(3148, 4)])
 
-# print(u.get_closest_k_cluster_to_user_id(t_path, 3))
+# print(u.get_closest_k_cluster_to_user_id(t_path, 5))
