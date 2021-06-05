@@ -145,6 +145,8 @@ class Utility:
       return pd.read_csv(self.get_evaluation_path())
 
     def get_training_data_file_path(self, k:int):
+      if k ==0:
+        return os.path.join(self.anonymized_data_path, "user_movie_ratings_matrix.csv")
       return os.path.join(self.anonymized_data_path, f"{k}{self.k_anonymized_postfix}")
 
     def get_test_data_file_path(self):
@@ -308,15 +310,16 @@ class Utility:
     def get_ks(self):
       return [0, 5,8,12,15,20,25]
 
-    def get_closest_k_cluster_to_user_id(self, k:int, metric="euclidean"):
+    def get_closest_k_cluster_to_user_id(self, k:int, metric="jacard"):
         id_to_idx_dict = self.get_col_to_user_index()
-        idx_to_kidx_path_dict = self.get_col_to_kanoncol_index(k)
+        idx_to_kidx_path_dict = self.get_col_to_kanoncol_index(k) if k!=0 else None
         k_anon_data_path = self.get_training_data_file_path(k)
        
 
         k_anaon_data = pd.read_csv(k_anon_data_path, sep=',', header=None).apply(pd.to_numeric).values
-        
+
         u_matrix = self.get_utility_matrix_from_train()
+
         user_to_cluster_dict = {}
         for um in tqdm(u_matrix):
             user_id = int(um[0])
@@ -325,11 +328,13 @@ class Utility:
             # Easy case - We have trained on this user before
             # Just need to lookup, to see what cluster they belong to
             if user_id in id_to_idx_dict and\
-            id_to_idx_dict[user_id] in idx_to_kidx_path_dict:            
+            k!=0 and id_to_idx_dict[user_id] in idx_to_kidx_path_dict:            
               user_to_cluster_dict[user_id] = idx_to_kidx_path_dict[id_to_idx_dict[user_id]]
+            elif user_id in id_to_idx_dict and k==0: # user maps to themselves, they were in training data
+              user_to_cluster_dict[user_id] = user_id
             else:
               #print(f'{user_id} not found in training data!')
-              user_to_cluster_dict[user_id] = self.find_closest_point(k_anaon_data, row_vec, metric)
+              user_to_cluster_dict[user_id] = self.find_closest_point(k_anaon_data, row_vec)
               #print(f'{user_id} mapped to {user_to_cluster_dict[user_id]}')
         
         return user_to_cluster_dict
