@@ -331,7 +331,7 @@ class Utility:
             k!=0 and id_to_idx_dict[user_id] in idx_to_kidx_path_dict:            
               user_to_cluster_dict[user_id] = idx_to_kidx_path_dict[id_to_idx_dict[user_id]]
             elif user_id in id_to_idx_dict and k==0: # user maps to themselves, they were in training data
-              user_to_cluster_dict[user_id] = user_id
+              user_to_cluster_dict[user_id] = id_to_idx_dict[user_id]
             else:
               #print(f'{user_id} not found in training data!')
               user_to_cluster_dict[user_id] = self.find_closest_point(k_anaon_data, row_vec)
