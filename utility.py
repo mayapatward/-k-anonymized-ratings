@@ -19,8 +19,8 @@ COL_NAME_ITEM_ID = COL_NAME_MOVIE_ID
 COL_NAME_RATING = "rating"
 COL_NAME_MOVIE_RATINGS = "movies_and_ratings"
 
-from google.colab import drive
-drive.mount("/content/drive",force_remount=True)
+#from google.colab import drive
+#drive.mount("/content/drive",force_remount=True)
 
 BASE_PATH = '/content/drive/MyDrive/CSE547_Final_Project/ml-100k/'
 class Utility:
