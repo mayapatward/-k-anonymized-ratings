@@ -106,6 +106,43 @@ class Utility:
       matrix[COL_NAME_USER_ID] = matrix[COL_NAME_USER_ID] + 1
       matrix = matrix[matrix[COL_NAME_RATING] > 0]
       return matrix
+    def get_training_user_itemlist(self):
+      training_data,_,_ = self.get_unanonymized_training_data()
+      return training_data.groupby(COL_NAME_USER_ID)[COL_NAME_MOVIE_ID].agg(set)
+  
+    def get_test_user_itemlist(self):
+      test_data = self.get_test_data()
+      return test_data.groupby(COL_NAME_USER_ID)[COL_NAME_MOVIE_ID].agg(set)
+  
+
+    def generate_evaluation_dataframe(self, num_negative_items_to_sample_per_user=100):
+      training_data = self.get_training_user_itemlist()
+      test_data = self.get_test_user_itemlist()
+      users = np.unique(np.concatenate([training_data.index.values, test_data.index.values]))
+      all_items_to_consider = set(self.get_movie_to_col_index().keys())
+      evaluation_df = self.get_test_data()
+      rows_to_add = []
+      for user in users:
+          items_in_train = training_data.loc[user]
+          items_in_test = test_data.loc[user]
+          neg_items = all_items_to_consider - items_in_train - items_in_test
+          neg_items = np.random.choice(list(neg_items), size=num_negative_items_to_sample_per_user, replace=False)
+          rows_to_add.extend([{COL_NAME_USER_ID:user, COL_NAME_MOVIE_ID:item, COL_NAME_RATING:0.0} for item in neg_items])
+      evaluation_df = evaluation_df.append(rows_to_add, True)
+      return evaluation_df
+    
+    def get_evaluation_path(self):
+      return os.path.join(self.anonymized_data_path,self.evaluation_file_name)
+
+
+    def save_evaluation_df_to(self, df, overwrite=False):
+      if os.path.exists(self.get_evaluation_path()) and not(overwrite):
+        print("File exists, if you want to overwrite, then pass the arugment to")
+        return
+      df.to_csv(self.get_evaluation_path())
+    
+    def get_evaluation_data(self):
+      return pd.read_csv(self.get_evaluation_path())
 
     def get_training_data_file_path(self, k:int):
       return os.path.join(self.anonymized_data_path, f"{k}{self.k_anonymized_postfix}")
