@@ -11,6 +11,7 @@ import os
 import json
 import numpy as np
 import pandas as pd
+from scipy.spatial import distance
 
 COL_NAME_USER_ID = "userId"
 COL_NAME_MOVIE_ID = "movieId"
