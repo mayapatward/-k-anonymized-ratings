@@ -338,7 +338,7 @@ class Utility:
               user_to_cluster_dict[user_id] = id_to_idx_dict[user_id]
             else:
               #print(f'{user_id} not found in training data!')
-              user_to_cluster_dict[user_id] = self.find_closest_point(k_anaon_data, row_vec)
+              user_to_cluster_dict[user_id] = self.find_closest_point(k_anaon_data, row_vec, metric)
               #print(f'{user_id} mapped to {user_to_cluster_dict[user_id]}')
         
         return user_to_cluster_dict
